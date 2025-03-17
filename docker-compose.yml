@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14
+    container_name: instagram_bot_db
+    environment:
+      - POSTGRES_USER=instabot
+      - POSTGRES_PASSWORD=instabot_password
+      - POSTGRES_DB=instabot_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U instabot -d instabot_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: instagram_bot_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=instabot
+      - DB_PASSWORD=instabot_password
+      - DB_NAME=instabot_db
+      - INSTA_USERNAME=${INSTA_USERNAME}
+      - INSTA_PASSWORD=${INSTA_PASSWORD}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    restart: always
+
+volumes:
+  postgres_data:
