@@ -87,44 +87,51 @@ def perform_random_action(db, managers, activity_manager):
         logger.info(f"انجام اقدام: {selected_action_func.__name__}")
 
         # پارامترهای مورد نیاز برای هر تابع
+        result = None
         if selected_action_func == managers["follow"].follow_users_by_hashtag:
             hashtag = managers["hashtag"].get_random_hashtag()
             count = random.randint(1, 3)
-            asyncio.run(selected_action_func(hashtag, count))
+            result = asyncio.run(selected_action_func(hashtag, count))
 
         elif selected_action_func == managers["follow"].follow_back_users:
             count = random.randint(2, 5)
-            asyncio.run(selected_action_func(count))
+            result = asyncio.run(selected_action_func(count))
 
         elif selected_action_func == managers["unfollow"].unfollow_non_followers:
             count = random.randint(2, 5)
             days = random.randint(5, 15)
-            asyncio.run(selected_action_func(count, days))
+            result = asyncio.run(selected_action_func(count, days))
 
         elif selected_action_func == managers["unfollow"].unfollow_if_unfollowed:
             count = random.randint(2, 5)
-            asyncio.run(selected_action_func(count))
+            result = asyncio.run(selected_action_func(count))
 
         elif selected_action_func == managers["comment"].comment_on_hashtag_posts:
             hashtag = managers["hashtag"].get_random_hashtag()
             count = random.randint(1, 2)
-            asyncio.run(selected_action_func(hashtag, count))
+            result = asyncio.run(selected_action_func(hashtag, count))
 
         elif selected_action_func == managers["comment"].comment_on_followers_posts:
             count = random.randint(1, 2)
-            asyncio.run(selected_action_func(count))
+            result = asyncio.run(selected_action_func(count))
 
         elif selected_action_func == managers["direct"].send_welcome_message_to_new_followers:
             count = random.randint(1, 3)
-            asyncio.run(selected_action_func(count))
+            result = asyncio.run(selected_action_func(count))
 
         elif selected_action_func == managers["story"].view_and_react_to_followers_stories:
             count = random.randint(3, 7)
-            asyncio.run(selected_action_func(count))
+            result = asyncio.run(selected_action_func(count))
 
-        logger.info(
-            f"اقدام {selected_action_func.__name__} با موفقیت انجام شد")
-        return True
+        # بررسی نتیجه، فقط اگر نتیجه موفقیت‌آمیز بود، آن را گزارش می‌کنیم
+        if result is not None and result > 0:
+            logger.info(
+                f"اقدام {selected_action_func.__name__} با موفقیت انجام شد. تعداد: {result}")
+            return True
+        else:
+            logger.warning(
+                f"اقدام {selected_action_func.__name__} نتیجه‌ای نداشت یا با خطا مواجه شد")
+            return False
 
     except Exception as e:
         logger.error(
@@ -148,7 +155,25 @@ def start_bot():
 
         # تلاش برای ورود به حساب کاربری
         logger.info("تلاش برای ورود به حساب کاربری اینستاگرام...")
-        if session_manager.load_session() or session_manager.login():
+        login_success = False
+
+        # ابتدا تلاش برای بارگذاری نشست
+        if session_manager.load_session():
+            # تست اتصال بعد از بارگذاری نشست
+            try:
+                client = session_manager.get_client()
+                client.get_timeline_feed()
+                logger.info("نشست بارگذاری شده معتبر است")
+                login_success = True
+            except Exception as e:
+                logger.warning(f"نشست بارگذاری شده معتبر نیست: {str(e)}")
+                # تلاش برای ورود با رمز عبور
+                login_success = session_manager.login()
+        else:
+            # تلاش برای ورود با رمز عبور
+            login_success = session_manager.login()
+
+        if login_success:
             logger.info("ورود به حساب کاربری با موفقیت انجام شد")
 
             # ایجاد مدیریت‌کننده‌های مختلف
@@ -187,11 +212,42 @@ def start_bot():
             logger.info("بات در حال شروع اقدامات تصادفی...")
 
             # حلقه اصلی بات
+            consecutive_errors = 0
+            max_consecutive_errors = 5
+
             while True:
                 # بررسی اینکه آیا ساعت کاری است
                 if activity_manager.is_working_hours():
                     # انجام یک اقدام تصادفی
-                    perform_random_action(db, managers, activity_manager)
+                    success = perform_random_action(
+                        db, managers, activity_manager)
+
+                    # بررسی خطاهای متوالی
+                    if not success:
+                        consecutive_errors += 1
+                        logger.warning(
+                            f"خطای متوالی {consecutive_errors} از {max_consecutive_errors}")
+
+                        if consecutive_errors >= max_consecutive_errors:
+                            logger.error(
+                                f"تعداد خطاهای متوالی به {max_consecutive_errors} رسید. تلاش مجدد برای ورود...")
+                            # تلاش مجدد برای ورود
+                            if session_manager.login():
+                                logger.info("ورود مجدد موفقیت‌آمیز بود")
+                                consecutive_errors = 0
+                                # بروزرسانی کلاینت در مدیریت‌کننده‌ها
+                                client = session_manager.get_client()
+                                follow_manager.client = client
+                                unfollow_manager.client = client
+                                comment_manager.client = client
+                                direct_manager.client = client
+                                story_manager.client = client
+                            else:
+                                logger.error(
+                                    "ورود مجدد ناموفق بود. توقف برای 30 دقیقه...")
+                                time.sleep(1800)  # 30 دقیقه استراحت
+                    else:
+                        consecutive_errors = 0  # ریست شمارنده خطاها در صورت موفقیت
 
                     # استراحت تصادفی بین اقدامات
                     min_delay = BOT_CONFIG["min_delay_between_actions"]

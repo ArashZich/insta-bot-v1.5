@@ -103,7 +103,12 @@ class FollowManager:
 
         try:
             logger.info(f"جستجوی پست‌ها با هشتگ {hashtag}")
-            medias = self.client.hashtag_medias_recent(hashtag, max_users * 3)
+            try:
+                medias = self.client.hashtag_medias_recent(
+                    hashtag, max_users * 3)
+            except Exception as e:
+                logger.error(f"خطا در دریافت پست‌های هشتگ {hashtag}: {str(e)}")
+                return 0
 
             if not medias:
                 logger.info(f"هیچ پستی با هشتگ {hashtag} یافت نشد")
@@ -122,7 +127,8 @@ class FollowManager:
                     break
 
                 user_id = media.user.pk
-                if await self.follow_user(user_id=user_id):
+                success = await self.follow_user(user_id=user_id)
+                if success:
                     followed_count += 1
 
             logger.info(f"{followed_count} کاربر با هشتگ {hashtag} فالو شدند")

@@ -37,22 +37,59 @@ class ActivityManager:
     def reset_daily_counters(self):
         """ریست کردن شمارنده‌های روزانه و ایجاد رکورد آمار جدید"""
         try:
+            # دریافت تاریخ فعلی
+            today = datetime.now().date()
+            yesterday = today - timedelta(days=1)
+
+            # بررسی وجود آمار برای دیروز
+            existing_stats = self.db.query(DailyStats).filter(
+                DailyStats.date == yesterday).first()
+            if existing_stats:
+                logger.info(f"آمار برای تاریخ {yesterday} قبلاً ثبت شده است")
+                # به روزرسانی آمار موجود
+                stats = self.db.query(BotStatus).first()
+                if stats:
+                    # ریست کردن شمارنده‌ها
+                    stats.follows_today = 0
+                    stats.unfollows_today = 0
+                    stats.comments_today = 0
+                    stats.likes_today = 0
+                    stats.direct_messages_today = 0
+                    stats.story_views_today = 0
+                    stats.story_reactions_today = 0
+                    self.db.commit()
+                    logger.info("شمارنده‌های روزانه با موفقیت ریست شدند")
+                return
+
             # ذخیره آمار روز قبل
-            yesterday = datetime.now().date() - timedelta(days=1)
             stats = self.db.query(BotStatus).first()
 
             if stats:
-                daily_stats = DailyStats(
-                    date=yesterday,
-                    follows=stats.follows_today,
-                    unfollows=stats.unfollows_today,
-                    comments=stats.comments_today,
-                    likes=stats.likes_today,
-                    direct_messages=stats.direct_messages_today,
-                    story_views=stats.story_views_today,
-                    story_reactions=stats.story_reactions_today
-                )
-                self.db.add(daily_stats)
+                # بررسی وجود داده‌های آماری واقعی
+                has_data = (stats.follows_today > 0 or stats.unfollows_today > 0 or
+                            stats.comments_today > 0 or stats.likes_today > 0 or
+                            stats.direct_messages_today > 0 or stats.story_views_today > 0 or
+                            stats.story_reactions_today > 0)
+
+                if has_data:
+                    # ذخیره داده‌های آماری موجود
+                    daily_stats = DailyStats(
+                        date=yesterday,
+                        follows=stats.follows_today,
+                        unfollows=stats.unfollows_today,
+                        comments=stats.comments_today,
+                        likes=stats.likes_today,
+                        direct_messages=stats.direct_messages_today,
+                        story_views=stats.story_views_today,
+                        story_reactions=stats.story_reactions_today,
+                        new_followers=0,  # این مقادیر باید در کد دیگری بروزرسانی شوند
+                        lost_followers=0
+                    )
+                    self.db.add(daily_stats)
+                    logger.info(f"آمار روز {yesterday} با موفقیت ثبت شد")
+                else:
+                    logger.info(
+                        "هیچ داده آماری برای روز گذشته وجود ندارد، ایجاد نمی‌شود")
 
                 # ریست کردن شمارنده‌ها
                 stats.follows_today = 0
