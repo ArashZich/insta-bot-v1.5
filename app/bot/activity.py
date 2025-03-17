@@ -110,11 +110,75 @@ class ActivityManager:
     def update_bot_status_activity(self, interaction_type=None):
         """بروزرسانی زمان آخرین فعالیت و شمارنده تعاملات"""
         try:
+            # ایجاد یک سشن جدید برای اطمینان از دسترسی به دیتابیس
             status = self.db.query(BotStatus).first()
-            if status:
-                status.last_activity = datetime.now()
 
-                if interaction_type:
+            if not status:
+                logger.error("رکورد وضعیت بات یافت نشد! در حال ایجاد...")
+                status = BotStatus(
+                    is_running=True,
+                    last_login=datetime.now(),
+                    follows_today=0,
+                    unfollows_today=0,
+                    comments_today=0,
+                    likes_today=0,
+                    direct_messages_today=0,
+                    story_views_today=0,
+                    story_reactions_today=0,
+                    error_count=0
+                )
+                self.db.add(status)
+                self.db.flush()
+                logger.info("رکورد وضعیت بات ایجاد شد")
+
+            # بروزرسانی زمان آخرین فعالیت
+            status.last_activity = datetime.now()
+
+            # بروزرسانی شمارنده مربوط به نوع تعامل
+            if interaction_type:
+                if interaction_type == InteractionType.FOLLOW:
+                    status.follows_today += 1
+                    logger.info(
+                        f"شمارنده فالو افزایش یافت: {status.follows_today}")
+                elif interaction_type == InteractionType.UNFOLLOW:
+                    status.unfollows_today += 1
+                    logger.info(
+                        f"شمارنده آنفالو افزایش یافت: {status.unfollows_today}")
+                elif interaction_type == InteractionType.COMMENT:
+                    status.comments_today += 1
+                    logger.info(
+                        f"شمارنده کامنت افزایش یافت: {status.comments_today}")
+                elif interaction_type == InteractionType.LIKE:
+                    status.likes_today += 1
+                    logger.info(
+                        f"شمارنده لایک افزایش یافت: {status.likes_today}")
+                elif interaction_type == InteractionType.DIRECT_MESSAGE:
+                    status.direct_messages_today += 1
+                    logger.info(
+                        f"شمارنده پیام مستقیم افزایش یافت: {status.direct_messages_today}")
+                elif interaction_type == InteractionType.STORY_VIEW:
+                    status.story_views_today += 1
+                    logger.info(
+                        f"شمارنده مشاهده استوری افزایش یافت: {status.story_views_today}")
+                elif interaction_type == InteractionType.STORY_REACTION:
+                    status.story_reactions_today += 1
+                    logger.info(
+                        f"شمارنده واکنش استوری افزایش یافت: {status.story_reactions_today}")
+
+            # کامیت تغییرات
+            self.db.commit()
+            logger.info(
+                f"وضعیت بات با موفقیت بروزرسانی شد (نوع تعامل: {interaction_type})")
+
+        except Exception as e:
+            logger.error(f"خطا در بروزرسانی وضعیت فعالیت بات: {str(e)}")
+            self.db.rollback()
+            # تلاش مجدد با ایجاد سشن جدید
+            try:
+                from app.database.db import get_db
+                new_db = next(get_db())
+                status = new_db.query(BotStatus).first()
+                if status and interaction_type:
                     if interaction_type == InteractionType.FOLLOW:
                         status.follows_today += 1
                     elif interaction_type == InteractionType.UNFOLLOW:
@@ -129,12 +193,13 @@ class ActivityManager:
                         status.story_views_today += 1
                     elif interaction_type == InteractionType.STORY_REACTION:
                         status.story_reactions_today += 1
-
-                self.db.commit()
-
-        except Exception as e:
-            logger.error(f"خطا در بروزرسانی وضعیت فعالیت بات: {str(e)}")
-            self.db.rollback()
+                    status.last_activity = datetime.now()
+                    new_db.commit()
+                    logger.info(
+                        "تلاش مجدد برای بروزرسانی وضعیت بات موفقیت‌آمیز بود")
+            except Exception as inner_e:
+                logger.error(
+                    f"تلاش مجدد برای بروزرسانی وضعیت بات ناموفق بود: {str(inner_e)}")
 
     def can_perform_interaction(self, interaction_type):
         """بررسی اینکه آیا می‌توان تعامل مورد نظر را انجام داد (با توجه به محدودیت‌های روزانه)"""

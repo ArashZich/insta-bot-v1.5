@@ -103,6 +103,25 @@ class FollowManager:
 
         try:
             logger.info(f"جستجوی پست‌ها با هشتگ {hashtag}")
+
+            # تست اعتبار نشست قبل از انجام عملیات
+            try:
+                self.client.get_timeline_feed()
+            except Exception as e:
+                logger.error(
+                    f"نشست نامعتبر است، تلاش برای ورود مجدد: {str(e)}")
+
+                # تلاش برای ورود مجدد
+                from app.bot.session_manager import SessionManager
+                session_manager = SessionManager(self.db)
+                if session_manager.login():
+                    logger.info("ورود مجدد موفقیت‌آمیز بود")
+                    self.client = session_manager.get_client()
+                else:
+                    logger.error("ورود مجدد ناموفق بود")
+                    return 0
+
+            # انجام جستجو براساس هشتگ
             try:
                 medias = self.client.hashtag_medias_recent(
                     hashtag, max_users * 3)
@@ -127,9 +146,27 @@ class FollowManager:
                     break
 
                 user_id = media.user.pk
+
+                # بررسی قبل از فالو کردن
+                try:
+                    user_info = self.client.user_info(user_id)
+                    username = user_info.username
+                    logger.info(
+                        f"تلاش برای فالو کردن کاربر {username} با آیدی {user_id}")
+                except Exception as e:
+                    logger.warning(
+                        f"خطا در دریافت اطلاعات کاربر {user_id}: {str(e)}")
+                    continue
+
                 success = await self.follow_user(user_id=user_id)
                 if success:
                     followed_count += 1
+                    logger.info(f"کاربر {username} با موفقیت فالو شد")
+                    # بروزرسانی آمار بات
+                    self.activity_manager.update_bot_status_activity(
+                        InteractionType.FOLLOW)
+                else:
+                    logger.warning(f"فالو کردن کاربر {username} ناموفق بود")
 
             logger.info(f"{followed_count} کاربر با هشتگ {hashtag} فالو شدند")
             return followed_count

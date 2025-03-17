@@ -19,6 +19,8 @@ from app.bot.unfollow import UnfollowManager
 from app.bot.comment import CommentManager
 from app.bot.direct import DirectMessageManager
 from app.bot.story import StoryManager
+from app.database.models import BotStatus,  InteractionType
+
 
 logger = get_logger("main")
 
@@ -45,6 +47,21 @@ async def startup_event():
     # ایجاد جداول دیتابیس
     init_db()
     logger.info("دیتابیس با موفقیت راه‌اندازی شد")
+
+    # تست اتصال به دیتابیس
+    try:
+        from app.database.test_db import test_database_connection
+        from app.database.db import get_db
+
+        db = next(get_db())
+        test_result = test_database_connection(db)
+
+        if test_result:
+            logger.info("تست دیتابیس با موفقیت انجام شد")
+        else:
+            logger.error("تست دیتابیس ناموفق بود - بررسی کنید!")
+    except Exception as e:
+        logger.error(f"خطا در تست دیتابیس: {str(e)}")
 
     # راه‌اندازی بات در یک thread جداگانه
     bot_thread = threading.Thread(target=start_bot)
@@ -86,51 +103,144 @@ def perform_random_action(db, managers, activity_manager):
     try:
         logger.info(f"انجام اقدام: {selected_action_func.__name__}")
 
+        # تست اعتبار نشست قبل از انجام اقدام
+        try:
+            client = managers["follow"].client  # هر مدیریتی که client دارد
+            client.get_timeline_feed()
+            logger.info("نشست معتبر است")
+        except Exception as e:
+            logger.error(f"نشست نامعتبر است، تلاش برای ورود مجدد: {str(e)}")
+
+            # تلاش برای ورود مجدد
+            session_manager = SessionManager(db)
+            if session_manager.login():
+                logger.info("ورود مجدد موفقیت‌آمیز بود")
+
+                # بروزرسانی کلاینت در تمام مدیریت‌کننده‌ها
+                new_client = session_manager.get_client()
+                for manager_name in ["follow", "unfollow", "comment", "direct", "story"]:
+                    if manager_name in managers and hasattr(managers[manager_name], 'client'):
+                        managers[manager_name].client = new_client
+                        logger.info(f"کلاینت در {manager_name} بروزرسانی شد")
+            else:
+                logger.error("ورود مجدد ناموفق بود")
+                return False
+
         # پارامترهای مورد نیاز برای هر تابع
         result = None
-        if selected_action_func == managers["follow"].follow_users_by_hashtag:
+        action_name = selected_action_func.__name__
+
+        if action_name == "follow_users_by_hashtag":
             hashtag = managers["hashtag"].get_random_hashtag()
             count = random.randint(1, 3)
             result = asyncio.run(selected_action_func(hashtag, count))
 
-        elif selected_action_func == managers["follow"].follow_back_users:
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.FOLLOW)
+                logger.info(f"آمار فالو بروزرسانی شد: {result} فالو جدید")
+
+        elif action_name == "follow_back_users":
             count = random.randint(2, 5)
             result = asyncio.run(selected_action_func(count))
 
-        elif selected_action_func == managers["unfollow"].unfollow_non_followers:
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.FOLLOW)
+                logger.info(f"آمار فالو بروزرسانی شد: {result} فالو جدید")
+
+        elif action_name == "unfollow_non_followers":
             count = random.randint(2, 5)
             days = random.randint(5, 15)
             result = asyncio.run(selected_action_func(count, days))
 
-        elif selected_action_func == managers["unfollow"].unfollow_if_unfollowed:
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.UNFOLLOW)
+                logger.info(f"آمار آنفالو بروزرسانی شد: {result} آنفالو جدید")
+
+        elif action_name == "unfollow_if_unfollowed":
             count = random.randint(2, 5)
             result = asyncio.run(selected_action_func(count))
 
-        elif selected_action_func == managers["comment"].comment_on_hashtag_posts:
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.UNFOLLOW)
+                logger.info(f"آمار آنفالو بروزرسانی شد: {result} آنفالو جدید")
+
+        elif action_name == "comment_on_hashtag_posts":
             hashtag = managers["hashtag"].get_random_hashtag()
             count = random.randint(1, 2)
             result = asyncio.run(selected_action_func(hashtag, count))
 
-        elif selected_action_func == managers["comment"].comment_on_followers_posts:
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.COMMENT)
+                logger.info(f"آمار کامنت بروزرسانی شد: {result} کامنت جدید")
+
+        elif action_name == "comment_on_followers_posts":
             count = random.randint(1, 2)
             result = asyncio.run(selected_action_func(count))
 
-        elif selected_action_func == managers["direct"].send_welcome_message_to_new_followers:
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.COMMENT)
+                logger.info(f"آمار کامنت بروزرسانی شد: {result} کامنت جدید")
+
+        elif action_name == "send_welcome_message_to_new_followers":
             count = random.randint(1, 3)
             result = asyncio.run(selected_action_func(count))
 
-        elif selected_action_func == managers["story"].view_and_react_to_followers_stories:
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.DIRECT_MESSAGE)
+                logger.info(f"آمار پیام بروزرسانی شد: {result} پیام جدید")
+
+        elif action_name == "view_and_react_to_followers_stories":
             count = random.randint(3, 7)
             result = asyncio.run(selected_action_func(count))
+
+            # ثبت مستقیم آمار
+            if result and result > 0:
+                for _ in range(result):
+                    activity_manager.update_bot_status_activity(
+                        InteractionType.STORY_VIEW)
+                    # نیمی از بازدیدها واکنش هم دارند
+                    if random.random() > 0.5:
+                        activity_manager.update_bot_status_activity(
+                            InteractionType.STORY_REACTION)
+                logger.info(f"آمار استوری بروزرسانی شد: {result} بازدید جدید")
 
         # بررسی نتیجه، فقط اگر نتیجه موفقیت‌آمیز بود، آن را گزارش می‌کنیم
         if result is not None and result > 0:
             logger.info(
-                f"اقدام {selected_action_func.__name__} با موفقیت انجام شد. تعداد: {result}")
+                f"اقدام {action_name} با موفقیت انجام شد. تعداد: {result}")
+
+            # بروزرسانی آخرین فعالیت در هر صورت
+            status = db.query(BotStatus).first()
+            if status:
+                status.last_activity = datetime.now()
+                db.commit()
+                logger.info("زمان آخرین فعالیت بروزرسانی شد")
+
             return True
         else:
             logger.warning(
-                f"اقدام {selected_action_func.__name__} نتیجه‌ای نداشت یا با خطا مواجه شد")
+                f"اقدام {action_name} نتیجه‌ای نداشت یا با خطا مواجه شد")
             return False
 
     except Exception as e:

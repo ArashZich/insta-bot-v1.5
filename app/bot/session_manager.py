@@ -48,19 +48,32 @@ class SessionManager:
         """ورود به اکانت اینستاگرام"""
         try:
             logger.info(f"تلاش برای ورود به عنوان {self.username}")
-            self.client.login(self.username, self.password)
-            self._save_session()
-            self._update_bot_status(True)
-            logger.info("ورود با موفقیت انجام شد")
-            return True
-        except TwoFactorRequired:
-            logger.error("تایید دو مرحله‌ای نیاز است")
-            self._update_bot_status(False, "تایید دو مرحله‌ای نیاز است")
-            return False
-        except ChallengeRequired:
-            logger.error("چالش اینستاگرام فعال شده است")
-            self._update_bot_status(False, "چالش اینستاگرام فعال شده است")
-            return False
+
+            # تلاش برای ورود با اطلاعات کاربری
+            login_attempt = self.client.login(self.username, self.password)
+
+            if login_attempt:
+                # ذخیره نشست برای استفاده بعدی
+                self._save_session()
+
+                # بروزرسانی وضعیت بات در دیتابیس
+                self._update_bot_status(True)
+
+                # تست اعتبار نشست با انجام یک عملیات سبک
+                try:
+                    self.client.get_timeline_feed()
+                    logger.info("نشست با موفقیت ایجاد و تأیید شد")
+                except Exception as e:
+                    logger.warning(
+                        f"نشست ایجاد شد اما در تأیید آن مشکلی وجود دارد: {str(e)}")
+
+                logger.info("ورود با موفقیت انجام شد")
+                return True
+            else:
+                logger.error("ورود ناموفق بود")
+                self._update_bot_status(False, "ورود ناموفق بود")
+                return False
+
         except Exception as e:
             logger.error(f"خطا در ورود: {str(e)}")
             self._update_bot_status(False, str(e))
