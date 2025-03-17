@@ -91,7 +91,17 @@ class SessionManager:
         try:
             status = self.db.query(BotStatus).first()
             if not status:
-                status = BotStatus()
+                status = BotStatus(
+                    is_running=False,
+                    follows_today=0,
+                    unfollows_today=0,
+                    comments_today=0,
+                    likes_today=0,
+                    direct_messages_today=0,
+                    story_views_today=0,
+                    story_reactions_today=0,
+                    error_count=0
+                )
                 self.db.add(status)
 
             status.is_running = is_running
@@ -101,7 +111,11 @@ class SessionManager:
             if error:
                 status.last_error = error
                 status.last_error_time = datetime.now()
-                status.error_count += 1
+                # اطمینان از اینکه error_count صفر نیست
+                if status.error_count is None:
+                    status.error_count = 1
+                else:
+                    status.error_count += 1
 
             self.db.commit()
         except Exception as e:
