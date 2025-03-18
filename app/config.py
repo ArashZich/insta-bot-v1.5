@@ -35,18 +35,18 @@ INSTAGRAM_CONFIG = {
 # Bot behavior configuration
 BOT_CONFIG = {
     "hashtags_file": DATA_DIR / "hashtags.txt",
-    "max_interactions_per_day": 150,  # مجموع تعاملات روزانه
-    "max_follows_per_day": 50,
-    "max_unfollows_per_day": 50,
-    "max_comments_per_day": 20,
-    "max_likes_per_day": 80,
-    "max_direct_messages_per_day": 10,
-    "max_story_views_per_day": 100,
-    "min_delay_between_actions": 30,  # حداقل تأخیر بین اقدامات به ثانیه
-    "max_delay_between_actions": 180,  # حداکثر تأخیر بین اقدامات به ثانیه
+    "max_interactions_per_day": 100,     # کاهش از 150 به 100
+    "max_follows_per_day": 30,          # کاهش از 50 به 30
+    "max_unfollows_per_day": 30,        # کاهش از 50 به 30
+    "max_comments_per_day": 15,         # کاهش از 20 به 15
+    "max_likes_per_day": 50,            # کاهش از 80 به 50
+    "max_direct_messages_per_day": 5,   # کاهش از 10 به 5
+    "max_story_views_per_day": 50,      # کاهش از 100 به 50
+    "min_delay_between_actions": 60,    # افزایش از 30 به 60 ثانیه
+    "max_delay_between_actions": 300,   # افزایش از 180 به 300 ثانیه
     "working_hours": {
         "start": 8,  # ساعت شروع فعالیت (8 صبح)
-        "end": 23,  # ساعت پایان فعالیت (11 شب)
+        "end": 23,   # ساعت پایان فعالیت (11 شب)
     }
 }
 

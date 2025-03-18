@@ -4,12 +4,15 @@ from datetime import datetime, timedelta, date
 from typing import List, Optional
 from enum import Enum
 
+from app.utils.logger import get_logger
 from app.database.db import get_db
 from app.database.models import BotStatus, DailyStats, Interaction, User, InteractionType
 from app.api.schemas import (
     BotStatusResponse, StatsResponse, InteractionsResponse,
     DateRangeRequest, ActionResponse, InteractionItem
 )
+
+logger = get_logger("router")
 
 # تعریف یک enum برای بازه‌های زمانی
 
@@ -91,53 +94,60 @@ async def get_stats(
     db: Session = Depends(get_db)
 ):
     """دریافت آمار بات در بازه زمانی مشخص"""
-    # محاسبه بازه زمانی
-    start_date, end_date = calculate_date_range(time_range)
+    try:
+        # محاسبه بازه زمانی
+        start_date, end_date = calculate_date_range(time_range)
 
-    # دریافت داده‌های آماری
-    stats = db.query(DailyStats).filter(
-        DailyStats.date >= start_date,
-        DailyStats.date <= end_date
-    ).order_by(DailyStats.date).all()
+        # دریافت داده‌های آماری
+        stats = db.query(DailyStats).filter(
+            DailyStats.date >= start_date,
+            DailyStats.date <= end_date
+        ).order_by(DailyStats.date).all()
 
-    # اگر آماری وجود نداشت، یک لیست خالی برمی‌گردانیم
-    if not stats:
+        # اگر آماری وجود نداشت، یک لیست خالی برمی‌گردانیم
+        if not stats:
+            return {
+                "data": [],
+                "total_follows": 0,
+                "total_unfollows": 0,
+                "total_comments": 0,
+                "total_likes": 0,
+                "total_direct_messages": 0,
+                "total_story_views": 0,
+                "total_story_reactions": 0,
+                "total_new_followers": 0,
+                "total_lost_followers": 0
+            }
+
+        # محاسبه مجموع‌ها با بررسی None بودن
+        total_follows = sum(stat.follows or 0 for stat in stats)
+        total_unfollows = sum(stat.unfollows or 0 for stat in stats)
+        total_comments = sum(stat.comments or 0 for stat in stats)
+        total_likes = sum(stat.likes or 0 for stat in stats)
+        total_direct_messages = sum(
+            stat.direct_messages or 0 for stat in stats)
+        total_story_views = sum(stat.story_views or 0 for stat in stats)
+        total_story_reactions = sum(
+            stat.story_reactions or 0 for stat in stats)
+        total_new_followers = sum(stat.new_followers or 0 for stat in stats)
+        total_lost_followers = sum(stat.lost_followers or 0 for stat in stats)
+
         return {
-            "data": [],
-            "total_follows": 0,
-            "total_unfollows": 0,
-            "total_comments": 0,
-            "total_likes": 0,
-            "total_direct_messages": 0,
-            "total_story_views": 0,
-            "total_story_reactions": 0,
-            "total_new_followers": 0,
-            "total_lost_followers": 0
+            "data": stats,
+            "total_follows": total_follows,
+            "total_unfollows": total_unfollows,
+            "total_comments": total_comments,
+            "total_likes": total_likes,
+            "total_direct_messages": total_direct_messages,
+            "total_story_views": total_story_views,
+            "total_story_reactions": total_story_reactions,
+            "total_new_followers": total_new_followers,
+            "total_lost_followers": total_lost_followers
         }
-
-    # محاسبه مجموع‌ها
-    total_follows = sum(stat.follows for stat in stats)
-    total_unfollows = sum(stat.unfollows for stat in stats)
-    total_comments = sum(stat.comments for stat in stats)
-    total_likes = sum(stat.likes for stat in stats)
-    total_direct_messages = sum(stat.direct_messages for stat in stats)
-    total_story_views = sum(stat.story_views for stat in stats)
-    total_story_reactions = sum(stat.story_reactions for stat in stats)
-    total_new_followers = sum(stat.new_followers for stat in stats)
-    total_lost_followers = sum(stat.lost_followers for stat in stats)
-
-    return {
-        "data": stats,
-        "total_follows": total_follows,
-        "total_unfollows": total_unfollows,
-        "total_comments": total_comments,
-        "total_likes": total_likes,
-        "total_direct_messages": total_direct_messages,
-        "total_story_views": total_story_views,
-        "total_story_reactions": total_story_reactions,
-        "total_new_followers": total_new_followers,
-        "total_lost_followers": total_lost_followers
-    }
+    except Exception as e:
+        logger.error(f"خطا در دریافت آمار: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"خطا در دریافت آمار: {str(e)}")
 
 
 @router.get("/interactions", response_model=InteractionsResponse)

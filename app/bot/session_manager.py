@@ -116,19 +116,22 @@ class SessionManager:
                     error_count=0
                 )
                 self.db.add(status)
+                self.db.flush()
+                logger.info("رکورد وضعیت بات ایجاد شد")
 
+            # بروزرسانی زمان آخرین فعالیت
             status.is_running = is_running
             if is_running:
                 status.last_login = datetime.now()
 
+            # بررسی و مقداردهی error_count در صورت None بودن
+            if status.error_count is None:
+                status.error_count = 0
+
             if error:
                 status.last_error = error
                 status.last_error_time = datetime.now()
-                # اطمینان از اینکه error_count صفر نیست
-                if status.error_count is None:
-                    status.error_count = 1
-                else:
-                    status.error_count += 1
+                status.error_count += 1
 
             self.db.commit()
         except Exception as e:
