@@ -5,22 +5,32 @@ services:
     image: postgres:14
     container_name: instagram_bot_db
     environment:
-      - POSTGRES_USER=instabot
-      - POSTGRES_PASSWORD=instabot_password
-      - POSTGRES_DB=instabot_db
+      - POSTGRES_USER=${DB_USER:-instabot}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-instabot_password}
+      - POSTGRES_DB=${DB_NAME:-instabot_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
     ports:
-      - "5432:5432"
-    restart: always
+      - "${DB_PORT:-5432}:5432"
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U instabot -d instabot_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-instabot} -d ${DB_NAME:-instabot_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - instabot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   app:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     container_name: instagram_bot_app
     depends_on:
       postgres:
@@ -28,16 +38,60 @@ services:
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USER=instabot
-      - DB_PASSWORD=instabot_password
-      - DB_NAME=instabot_db
+      - DB_USER=${DB_USER:-instabot}
+      - DB_PASSWORD=${DB_PASSWORD:-instabot_password}
+      - DB_NAME=${DB_NAME:-instabot_db}
       - INSTA_USERNAME=${INSTA_USERNAME}
       - INSTA_PASSWORD=${INSTA_PASSWORD}
+      - TZ=${TIMEZONE:-Asia/Tehran}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
     ports:
-      - "8000:8000"
-    restart: always
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+    networks:
+      - instabot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    # محدودیت‌های منابع برای جلوگیری از مصرف بیش از حد
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 500M
+        reservations:
+          cpus: '0.1'
+          memory: 200M
+
+  # افزودن Adminer برای مدیریت آسان دیتابیس
+  adminer:
+    image: adminer
+    container_name: instagram_bot_adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    networks:
+      - instabot-network
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+    depends_on:
+      - postgres
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 volumes:
   postgres_data:
+    name: instabot_db_data
+
+networks:
+  instabot-network:
+    name: instabot-network
+    driver: bridge
