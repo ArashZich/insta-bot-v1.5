@@ -49,10 +49,10 @@ class SessionManager:
         try:
             logger.info(f"تلاش برای ورود به عنوان {self.username}")
 
-            # تلاش برای ورود با اطلاعات کاربری
-            login_attempt = self.client.login(self.username, self.password)
+            # تلاش ساده برای ورود با اطلاعات کاربری
+            login_success = self.client.login(self.username, self.password)
 
-            if login_attempt:
+            if login_success:
                 # ذخیره نشست برای استفاده بعدی
                 self._save_session()
 
@@ -117,7 +117,6 @@ class SessionManager:
                 )
                 self.db.add(status)
                 self.db.flush()
-                logger.info("رکورد وضعیت بات ایجاد شد")
 
             # بروزرسانی زمان آخرین فعالیت
             status.is_running = is_running

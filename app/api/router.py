@@ -99,13 +99,13 @@ async def get_stats(
         start_date, end_date = calculate_date_range(time_range)
 
         # دریافت داده‌های آماری
-        stats = db.query(DailyStats).filter(
+        stats_db = db.query(DailyStats).filter(
             DailyStats.date >= start_date,
             DailyStats.date <= end_date
         ).order_by(DailyStats.date).all()
 
         # اگر آماری وجود نداشت، یک لیست خالی برمی‌گردانیم
-        if not stats:
+        if not stats_db:
             return {
                 "data": [],
                 "total_follows": 0,
@@ -119,18 +119,35 @@ async def get_stats(
                 "total_lost_followers": 0
             }
 
+        # تبدیل مدل‌های SQLAlchemy به دیکشنری
+        stats = []
+        for stat in stats_db:
+            stats.append({
+                "date": stat.date,
+                "follows": stat.follows or 0,
+                "unfollows": stat.unfollows or 0,
+                "comments": stat.comments or 0,
+                "likes": stat.likes or 0,
+                "direct_messages": stat.direct_messages or 0,
+                "story_views": stat.story_views or 0,
+                "story_reactions": stat.story_reactions or 0,
+                "new_followers": stat.new_followers or 0,
+                "lost_followers": stat.lost_followers or 0
+            })
+
         # محاسبه مجموع‌ها با بررسی None بودن
-        total_follows = sum(stat.follows or 0 for stat in stats)
-        total_unfollows = sum(stat.unfollows or 0 for stat in stats)
-        total_comments = sum(stat.comments or 0 for stat in stats)
-        total_likes = sum(stat.likes or 0 for stat in stats)
+        total_follows = sum(stat.follows or 0 for stat in stats_db)
+        total_unfollows = sum(stat.unfollows or 0 for stat in stats_db)
+        total_comments = sum(stat.comments or 0 for stat in stats_db)
+        total_likes = sum(stat.likes or 0 for stat in stats_db)
         total_direct_messages = sum(
-            stat.direct_messages or 0 for stat in stats)
-        total_story_views = sum(stat.story_views or 0 for stat in stats)
+            stat.direct_messages or 0 for stat in stats_db)
+        total_story_views = sum(stat.story_views or 0 for stat in stats_db)
         total_story_reactions = sum(
-            stat.story_reactions or 0 for stat in stats)
-        total_new_followers = sum(stat.new_followers or 0 for stat in stats)
-        total_lost_followers = sum(stat.lost_followers or 0 for stat in stats)
+            stat.story_reactions or 0 for stat in stats_db)
+        total_new_followers = sum(stat.new_followers or 0 for stat in stats_db)
+        total_lost_followers = sum(
+            stat.lost_followers or 0 for stat in stats_db)
 
         return {
             "data": stats,
